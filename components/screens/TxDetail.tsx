@@ -21,7 +21,7 @@ export function ScTxDetail({ th, nav, app, params }: Props) {
   ];
 
   return (
-    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, paddingTop: 54 }}>
+    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS }}>
       <div style={{ padding: '10px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Tap onClick={() => nav(-1)} style={{ padding: 6 }}>{Icon.back(th.ink)}</Tap>
         <Tap onClick={() => { app.removeTx(tx.id); nav(-1); }} style={{ padding: 8, borderRadius: 10 }}>{Icon.trash(T.coral)}</Tap>

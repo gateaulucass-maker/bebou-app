@@ -1,8 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { supabase, supabaseEnabled } from '@/lib/supabase';
 
 const STORAGE_KEY = 'bebou.v1';
+export { STORAGE_KEY as STORAGE_KEY_EXPORT };
 
 export const CATS: Record<string, { id: string; label: string; emoji: string }> = {
   alimentation: { id: 'alimentation', label: 'Alimentation', emoji: '🥑' },
@@ -39,152 +41,107 @@ export interface Recurrent {
 export interface AppStateShape {
   txs: Transaction[];
   recs: Recurrent[];
-  addTx: (tx: Omit<Transaction, 'id' | 'ts'>) => void;
-  removeTx: (id: string) => void;
-  addRec: (r: Omit<Recurrent, 'id'>) => void;
-  removeRec: (id: string) => void;
-  reset: () => void;
+  loading: boolean;
+  addTx: (tx: Omit<Transaction, 'id' | 'ts'>) => Promise<void>;
+  removeTx: (id: string) => Promise<void>;
+  addRec: (r: Omit<Recurrent, 'id'>) => Promise<void>;
+  removeRec: (id: string) => Promise<void>;
 }
 
-// ── Seed data
-const SEED_TX: Transaction[] = [
-  { id: 't1',  ts: Date.now() - 3*3600e3,      label: 'Déjeuner Big Mamma',    cat: 'sorties',      amount: -38.50 },
-  { id: 't2',  ts: Date.now() - 7*3600e3,      label: 'Café & croissant',      cat: 'alimentation', amount: -4.80  },
-  { id: 't3',  ts: Date.now() - 1*86400e3,     label: 'Monoprix',              cat: 'alimentation', amount: -42.17 },
-  { id: 't4',  ts: Date.now() - 1*86400e3-4e6, label: 'Anniv copine — cadeau', cat: 'cadeaux',      amount: -55.00 },
-  { id: 't5',  ts: Date.now() - 3*86400e3,     label: 'Bar Le Perchoir',       cat: 'sorties',      amount: -24.00 },
-  { id: 't6',  ts: Date.now() - 3*86400e3-3e6, label: 'Zara',                  cat: 'courses',      amount: -79.90 },
-  { id: 't7',  ts: Date.now() - 4*86400e3,     label: 'Salaire Avril',         cat: 'salaire',      amount: 2450.00, income: true },
-  { id: 't8',  ts: Date.now() - 5*86400e3,     label: 'Resto Indien',          cat: 'sorties',      amount: -32.40 },
-  { id: 't9',  ts: Date.now() - 6*86400e3,     label: 'Netflix',               cat: 'recurrent',    amount: -13.49, recurrent: true },
-  { id: 't10', ts: Date.now() - 7*86400e3,     label: 'Carrefour',             cat: 'alimentation', amount: -61.22 },
-  { id: 't11', ts: Date.now() - 8*86400e3,     label: 'Loyer',                 cat: 'recurrent',    amount: -820.00, recurrent: true },
-  { id: 't12', ts: Date.now() - 9*86400e3,     label: 'Cadeau fête des mères', cat: 'cadeaux',      amount: -42.00 },
-  { id: 't13', ts: Date.now() - 10*86400e3,    label: 'Clubbing',              cat: 'sorties',      amount: -48.00 },
-  { id: 't14', ts: Date.now() - 11*86400e3,    label: 'Sézane',                cat: 'courses',      amount: -120.00 },
-  { id: 't15', ts: Date.now() - 13*86400e3,    label: 'Spotify',               cat: 'recurrent',    amount: -9.99,  recurrent: true },
-  { id: 't16', ts: Date.now() - 14*86400e3,    label: 'Cadeau mariage Tom',    cat: 'cadeau',       amount: 200.00, income: true },
-  { id: 't17', ts: Date.now() - 15*86400e3,    label: 'Boulangerie Utopie',    cat: 'alimentation', amount: -6.40  },
-  { id: 't18', ts: Date.now() - 17*86400e3,    label: 'Diner chez Pink',       cat: 'sorties',      amount: -45.80 },
-];
-
-const PAST_MONTHS_TX: Transaction[] = (() => {
-  const out: Transaction[] = [];
-  const now = new Date();
-  const monthPlans = [
-    { off: 1, sal: 2450, expBase: [
-      ['Loyer','recurrent',-820,5,true],['Netflix','recurrent',-13.49,15,true],
-      ['Spotify','recurrent',-9.99,8,true],['Salle de sport','recurrent',-29.90,1,true],
-      ['Forfait mobile','recurrent',-19.99,3,true],
-      ['Monoprix','alimentation',-56.20,6],['Carrefour','alimentation',-72.40,12],
-      ['Picard','alimentation',-31.50,18],['Boulangerie','alimentation',-14.20,22],
-      ['Brunch Holybelly','sorties',-28.00,7],['Bar à vin','sorties',-42.00,14],
-      ['Resto sushi','sorties',-36.00,21],['Ciné','sorties',-14.50,25],
-      ['Zara','courses',-64.00,9],['Pharmacie','courses',-23.70,17],
-      ['Cadeau Maman','cadeaux',-45.00,20],
-    ] as [string,string,number,number,boolean?][]},
-    { off: 2, sal: 2450, expBase: [
-      ['Loyer','recurrent',-820,5,true],['Netflix','recurrent',-13.49,15,true],
-      ['Spotify','recurrent',-9.99,8,true],['Salle de sport','recurrent',-29.90,1,true],
-      ['Forfait mobile','recurrent',-19.99,3,true],
-      ['Monoprix','alimentation',-48.90,4],['Franprix','alimentation',-34.20,11],
-      ['Traiteur libanais','alimentation',-22.40,19],['Boulangerie','alimentation',-12.80,23],
-      ['Dîner Saint-Valentin','sorties',-88.00,14],['Bar cocktails','sorties',-52.00,10],
-      ['Restaurant thai','sorties',-29.00,18],
-      ['Uniqlo','courses',-78.00,12],['Sephora','courses',-45.00,7],
-      ['Cadeau anniv Tom','cadeaux',-60.00,16],['Cadeau fleurs','cadeaux',-28.00,13],
-    ] as [string,string,number,number,boolean?][]},
-    { off: 3, sal: 2450, expBase: [
-      ['Loyer','recurrent',-820,5,true],['Netflix','recurrent',-13.49,15,true],
-      ['Spotify','recurrent',-9.99,8,true],['Salle de sport','recurrent',-29.90,1,true],
-      ['Forfait mobile','recurrent',-19.99,3,true],
-      ['Monoprix','alimentation',-62.30,8],['Carrefour','alimentation',-81.20,14],
-      ['Naturalia','alimentation',-42.60,20],
-      ['Galette des rois','sorties',-18.00,6],['Soldes dîner','sorties',-34.00,17],
-      ['Brunch copines','sorties',-26.50,21],
-      ['Soldes Sézane','courses',-140.00,11],['Soldes Uniqlo','courses',-95.00,12],
-      ['Soldes Nike','courses',-89.00,13],['Pharmacie','courses',-18.40,24],
-      ['Cadeau retard Noël','cadeaux',-35.00,4],
-    ] as [string,string,number,number,boolean?][]},
-    { off: 4, sal: 2450, expBase: [
-      ['Loyer','recurrent',-820,5,true],['Netflix','recurrent',-13.49,15,true],
-      ['Spotify','recurrent',-9.99,8,true],['Salle de sport','recurrent',-29.90,1,true],
-      ['Forfait mobile','recurrent',-19.99,3,true],
-      ['Courses Noël','alimentation',-145.00,22],['Monoprix','alimentation',-58.00,10],
-      ['Picard','alimentation',-42.00,18],['Champagne','alimentation',-68.00,24],
-      ['Dîner entreprise','sorties',-45.00,12],['Nouvel An','sorties',-95.00,31],
-      ['Bar Noël','sorties',-48.00,20],['Resto copines','sorties',-52.00,15],
-      ['Cadeau Maman','cadeaux',-120.00,20],['Cadeau Papa','cadeaux',-85.00,20],
-      ['Cadeau Tom','cadeaux',-60.00,21],['Cadeau copines','cadeaux',-95.00,18],
-      ['Cadeau neveu','cadeaux',-42.00,19],['Cadeau collègue','cadeaux',-25.00,17],
-      ['Manteau hiver','courses',-180.00,8],['Bottines','courses',-110.00,14],
-    ] as [string,string,number,number,boolean?][]},
-    { off: 5, sal: 2450, expBase: [
-      ['Loyer','recurrent',-820,5,true],['Netflix','recurrent',-13.49,15,true],
-      ['Spotify','recurrent',-9.99,8,true],['Salle de sport','recurrent',-29.90,1,true],
-      ['Forfait mobile','recurrent',-19.99,3,true],
-      ['Monoprix','alimentation',-54.00,9],['Carrefour','alimentation',-68.20,16],
-      ['Boulangerie','alimentation',-16.40,22],
-      ['Black Friday resto','sorties',-42.00,28],['Bar Le Perchoir','sorties',-36.00,12],
-      ['Brunch','sorties',-24.00,19],
-      ['Black Friday Apple','courses',-220.00,29],['& Other Stories','courses',-88.00,15],
-      ['Cadeau anniv Manon','cadeaux',-50.00,11],
-    ] as [string,string,number,number,boolean?][]},
-  ];
-
-  monthPlans.forEach((plan) => {
-    const salaryDate = new Date(now.getFullYear(), now.getMonth() - plan.off, 1, 9, 30);
-    out.push({ id: `past-sal-${plan.off}`, ts: salaryDate.getTime(), label: 'Salaire', cat: 'salaire', amount: plan.sal, income: true });
-    plan.expBase.forEach((item, i) => {
-      const [label, cat, amt, day, rec] = item;
-      const d = new Date(now.getFullYear(), now.getMonth() - plan.off, day as number, 12 + (i % 10), (i * 7) % 60);
-      out.push({ id: `past-${plan.off}-${i}`, ts: d.getTime(), label: label as string, cat: cat as string, amount: amt as number, ...(rec ? { recurrent: true } : {}) });
-    });
-  });
-  return out;
-})();
-
-const ALL_SEED_TX = [...SEED_TX, ...PAST_MONTHS_TX];
-
-export const SEED_REC: Recurrent[] = [
-  { id: 'r1', label: 'Loyer',          amount: 820.00, day: 5,  emoji: '🏠' },
-  { id: 'r2', label: 'Netflix',        amount: 13.49,  day: 15, emoji: '📺' },
-  { id: 'r3', label: 'Spotify',        amount: 9.99,   day: 8,  emoji: '🎧' },
-  { id: 'r4', label: 'Salle de sport', amount: 29.90,  day: 1,  emoji: '🏋️' },
-  { id: 'r5', label: 'Forfait mobile', amount: 19.99,  day: 3,  emoji: '📱' },
-];
-
-function loadState(): { txs: Transaction[]; recs: Recurrent[] } {
+// ── Local cache helpers
+function loadLocal(): { txs: Transaction[]; recs: Recurrent[] } {
   try {
-    if (typeof window === 'undefined') return { txs: ALL_SEED_TX, recs: SEED_REC };
+    if (typeof window === 'undefined') return { txs: [], recs: [] };
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { txs: ALL_SEED_TX, recs: SEED_REC };
+  return { txs: [], recs: [] };
 }
 
-function saveState(s: { txs: Transaction[]; recs: Recurrent[] }) {
+function saveLocal(s: { txs: Transaction[]; recs: Recurrent[] }) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
 }
 
 const AppStateCtx = createContext<AppStateShape | null>(null);
 
-export function AppStateProvider({ children, resetKey }: { children: React.ReactNode; resetKey?: number }) {
-  const [state, setState] = useState(() => loadState());
+export function AppStateProvider({ children, userId }: { children: React.ReactNode; userId?: string }) {
+  const [txs, setTxs] = useState<Transaction[]>([]);
+  const [recs, setRecs] = useState<Recurrent[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { saveState(state); }, [state]);
+  // Load data: Supabase if connected, else localStorage
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (supabaseEnabled && supabase && userId) {
+        const [{ data: txData }, { data: recData }] = await Promise.all([
+          supabase.from('transactions').select('*').eq('user_id', userId).order('ts', { ascending: false }),
+          supabase.from('recurrents').select('*').eq('user_id', userId),
+        ]);
+        if (cancelled) return;
+        const loadedTxs: Transaction[] = (txData ?? []).map((r) => ({
+          id: r.id, ts: Number(r.ts), label: r.label, cat: r.cat,
+          amount: Number(r.amount), income: r.income, recurrent: r.recurrent,
+        }));
+        const loadedRecs: Recurrent[] = (recData ?? []).map((r) => ({
+          id: r.id, label: r.label, amount: Number(r.amount), day: r.day, emoji: r.emoji,
+        }));
+        setTxs(loadedTxs);
+        setRecs(loadedRecs);
+        saveLocal({ txs: loadedTxs, recs: loadedRecs });
+      } else {
+        const local = loadLocal();
+        if (!cancelled) { setTxs(local.txs); setRecs(local.recs); }
+      }
+      if (!cancelled) setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [userId]);
 
-  const api = useMemo<AppStateShape>(() => ({
-    txs: state.txs,
-    recs: state.recs,
-    addTx: (tx) => setState((s) => ({ ...s, txs: [{ ...tx, id: 't' + Date.now(), ts: Date.now() }, ...s.txs] })),
-    removeTx: (id) => setState((s) => ({ ...s, txs: s.txs.filter((t) => t.id !== id) })),
-    addRec: (r) => setState((s) => ({ ...s, recs: [...s.recs, { ...r, id: 'r' + Date.now() }] })),
-    removeRec: (id) => setState((s) => ({ ...s, recs: s.recs.filter((r) => r.id !== id) })),
-    reset: () => setState({ txs: ALL_SEED_TX, recs: SEED_REC }),
-  }), [state]);
+  // Keep localStorage in sync
+  useEffect(() => {
+    if (!loading) saveLocal({ txs, recs });
+  }, [txs, recs, loading]);
 
-  return <AppStateCtx.Provider value={api}>{children}</AppStateCtx.Provider>;
+  const addTx = useCallback(async (tx: Omit<Transaction, 'id' | 'ts'>) => {
+    const id = 't' + Date.now();
+    const ts = Date.now();
+    const newTx: Transaction = { ...tx, id, ts };
+    setTxs((prev) => [newTx, ...prev]);
+    if (supabaseEnabled && supabase && userId) {
+      await supabase.from('transactions').insert({ ...newTx, user_id: userId });
+    }
+  }, [userId]);
+
+  const removeTx = useCallback(async (id: string) => {
+    setTxs((prev) => prev.filter((t) => t.id !== id));
+    if (supabaseEnabled && supabase && userId) {
+      await supabase.from('transactions').delete().eq('id', id).eq('user_id', userId);
+    }
+  }, [userId]);
+
+  const addRec = useCallback(async (r: Omit<Recurrent, 'id'>) => {
+    const id = 'r' + Date.now();
+    const newRec: Recurrent = { ...r, id };
+    setRecs((prev) => [...prev, newRec]);
+    if (supabaseEnabled && supabase && userId) {
+      await supabase.from('recurrents').insert({ ...newRec, user_id: userId });
+    }
+  }, [userId]);
+
+  const removeRec = useCallback(async (id: string) => {
+    setRecs((prev) => prev.filter((r) => r.id !== id));
+    if (supabaseEnabled && supabase && userId) {
+      await supabase.from('recurrents').delete().eq('id', id).eq('user_id', userId);
+    }
+  }, [userId]);
+
+  const value = useMemo<AppStateShape>(() => ({
+    txs, recs, loading, addTx, removeTx, addRec, removeRec,
+  }), [txs, recs, loading, addTx, removeTx, addRec, removeRec]);
+
+  return <AppStateCtx.Provider value={value}>{children}</AppStateCtx.Provider>;
 }
 
 export const useApp = () => {
@@ -193,16 +150,13 @@ export const useApp = () => {
   return ctx;
 };
 
-// ── Helpers
+// ── Formatters
 export const fmtEur = (n: number) =>
   n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 export const fmtEurShort = (n: number) => Math.round(n).toLocaleString('fr-FR') + ' €';
 
 export interface Totals {
-  income: number;
-  expense: number;
-  balance: number;
-  byCat: Record<string, number>;
+  income: number; expense: number; balance: number; byCat: Record<string, number>;
 }
 
 export function computeTotals(txs: Transaction[]): Totals {
@@ -279,5 +233,3 @@ export function useCountUp(target: number, dur = 700): number {
   }, [target, dur]);
   return v;
 }
-
-export const STORAGE_KEY_EXPORT = STORAGE_KEY;

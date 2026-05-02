@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AppStateProvider, useApp, STORAGE_KEY_EXPORT } from './state/AppState';
-import { theme, T, SANS } from './ui/tokens';
+import { AppStateProvider, useApp } from './state/AppState';
+import { theme, T, SANS, SERIF } from './ui/tokens';
 import { Icon } from './ui/Icons';
 import { Tap, PageTransition, Toast } from './ui/Primitives';
-import { IOSDevice } from './frame/IOSDevice';
+import { AuthScreen } from './auth/AuthScreen';
+import { supabase, supabaseEnabled } from '@/lib/supabase';
 import { ScDashboard } from './screens/Dashboard';
 import { ScJournal } from './screens/Journal';
 import { ScRecurrent } from './screens/Recurrent';
@@ -13,10 +14,72 @@ import { ScTxDetail } from './screens/TxDetail';
 import { ScStats } from './stats/Stats';
 import { SheetChoice, SheetAddExpense, SheetAddIncome, SheetAddRecurrent } from './sheets/Sheets';
 
-type ScreenName = 'home' | 'journal' | 'stats' | 'rec' | 'tx-detail' | 'cat-detail';
+type ScreenName = 'home' | 'journal' | 'stats' | 'rec' | 'tx-detail';
 type SheetName = 'choice' | 'expense' | 'income' | 'rec' | null;
 
-// ── Tab bar
+const NAV_ITEMS = [
+  { k: 'home',    l: 'Accueil',    icon: Icon.home },
+  { k: 'journal', l: 'Journal',    icon: Icon.journal },
+  { k: 'stats',   l: 'Stats',      icon: Icon.chart },
+  { k: 'rec',     l: 'Récurrents', icon: Icon.repeat },
+] as const;
+
+// ── Desktop Sidebar
+function Sidebar({ tab, onTab, onFab, dark, onToggleDark, onLogout, userId, th }: {
+  tab: string; onTab: (k: string) => void; onFab: () => void;
+  dark: boolean; onToggleDark: () => void; onLogout: () => void;
+  userId?: string; th: ReturnType<typeof theme>;
+}) {
+  return (
+    <div style={{ width: 240, height: '100vh', background: th.card, borderRight: `1px solid ${th.line}`, display: 'flex', flexDirection: 'column', padding: '28px 16px 24px', flexShrink: 0 }}>
+      {/* Logo */}
+      <div style={{ padding: '0 8px 32px' }}>
+        <div style={{ fontFamily: SERIF, fontSize: 30, letterSpacing: -0.5, color: th.ink }}>Bébou</div>
+        <div style={{ fontSize: 12, color: th.muted, fontStyle: 'italic', marginTop: 2 }}>ton suivi de dépenses</div>
+      </div>
+
+      {/* Nav items */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {NAV_ITEMS.map(({ k, l, icon }) => {
+          const active = tab === k;
+          return (
+            <Tap key={k} onClick={() => onTab(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: active ? T.coral + '20' : 'transparent', color: active ? T.coral : th.ink, fontFamily: SANS, fontSize: 14, fontWeight: active ? 600 : 500, transition: 'background 150ms, color 150ms' }}>
+              {icon(active ? T.coral : th.ink)}
+              {l}
+            </Tap>
+          );
+        })}
+      </div>
+
+      {/* FAB */}
+      <Tap onClick={onFab} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, padding: '12px 16px', borderRadius: 14, background: T.coral, color: '#fff', fontFamily: SANS, fontSize: 14, fontWeight: 600, boxShadow: '0 4px 14px rgba(255,122,92,0.4)' }}>
+        {Icon.plus('#fff')}
+        Ajouter
+      </Tap>
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Footer */}
+      <div style={{ borderTop: `1px solid ${th.line}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Tap onClick={onToggleDark} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 10, color: th.ink, fontSize: 13, fontFamily: SANS }}>
+          <span>Mode sombre</span>
+          <div style={{ width: 36, height: 20, background: dark ? T.coral : th.faint, borderRadius: 10, position: 'relative', transition: 'background 200ms' }}>
+            <div style={{ position: 'absolute', top: 2, left: dark ? 18 : 2, width: 16, height: 16, borderRadius: 8, background: '#fff', transition: 'left 200ms', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+          </div>
+        </Tap>
+
+        {supabaseEnabled && userId && (
+          <Tap onClick={onLogout} style={{ padding: '8px 12px', borderRadius: 10, color: th.muted, fontSize: 13, fontFamily: SANS, textAlign: 'left' }}>
+            Se déconnecter
+          </Tap>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Mobile Tab Bar
 function TabBar({ tab, onTab, onFab, th }: { tab: string; onTab: (k: string) => void; onFab: () => void; th: ReturnType<typeof theme> }) {
   const tabs = [
     { k: 'home',    l: 'Accueil',    icon: Icon.home },
@@ -27,7 +90,7 @@ function TabBar({ tab, onTab, onFab, th }: { tab: string; onTab: (k: string) => 
   ] as const;
 
   return (
-    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 50, background: th.bg === T.cream ? 'rgba(255,244,239,0.88)' : 'rgba(26,21,19,0.88)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', borderTop: `0.5px solid ${th.line}`, padding: '8px 12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: th.bg === T.cream ? 'rgba(255,244,239,0.92)' : 'rgba(26,21,19,0.92)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', borderTop: `0.5px solid ${th.line}`, padding: '8px 12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
       {tabs.map((t) => {
         if (t.k === 'fab') return (
           <Tap key="fab" onClick={onFab} style={{ width: 52, height: 52, borderRadius: 26, background: T.coral, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(255,122,92,0.5)', marginTop: -20 }}>
@@ -46,10 +109,14 @@ function TabBar({ tab, onTab, onFab, th }: { tab: string; onTab: (k: string) => 
   );
 }
 
-// ── Router
-function Router({ dark, showChart }: { dark: boolean; showChart: boolean }) {
+// ── Inner app (needs AppState context)
+function AppInner({ dark, setDark, isDesktop, userId, onLogout }: {
+  dark: boolean; setDark: (d: boolean) => void;
+  isDesktop: boolean; userId?: string; onLogout: () => void;
+}) {
   const th = theme(dark);
   const app = useApp();
+
   const [stack, setStack] = useState<{ screen: ScreenName; params: Record<string, unknown> }[]>([{ screen: 'home', params: {} }]);
   const [tab, setTab] = useState<string>('home');
   const [sheet, setSheet] = useState<SheetName>(null);
@@ -73,30 +140,42 @@ function Router({ dark, showChart }: { dark: boolean; showChart: boolean }) {
   };
 
   const onTab = (k: string) => { setTab(k); setStack([{ screen: k as ScreenName, params: {} }]); };
+  const onFab = () => setSheet('choice');
 
   const top = stack[stack.length - 1];
   const direction = stack.length >= prevDepth.current ? 'forward' : 'backward';
   useEffect(() => { prevDepth.current = stack.length; });
   const pageKey = stack.map(s => s.screen).join('>');
 
-  const common = { th, nav, app, showChart };
+  const common = { th, nav, app, showChart: true };
   let page: React.ReactNode;
-  if      (top.screen === 'home')       page = <ScDashboard {...common} />;
-  else if (top.screen === 'journal')    page = <ScJournal {...common} params={top.params} />;
-  else if (top.screen === 'stats')      page = <ScStats {...common} />;
-  else if (top.screen === 'rec')        page = <ScRecurrent {...common} onAdd={() => setSheet('rec')} />;
-  else if (top.screen === 'tx-detail')  page = <ScTxDetail {...common} params={top.params} />;
+  if      (top.screen === 'home')      page = <ScDashboard {...common} />;
+  else if (top.screen === 'journal')   page = <ScJournal {...common} params={top.params} />;
+  else if (top.screen === 'stats')     page = <ScStats {...common} />;
+  else if (top.screen === 'rec')       page = <ScRecurrent {...common} onAdd={() => setSheet('rec')} />;
+  else if (top.screen === 'tx-detail') page = <ScTxDetail {...common} params={top.params} />;
   else page = <ScDashboard {...common} />;
 
   return (
-    <div style={{ height: '100%', position: 'relative', overflow: 'hidden', background: th.bg }}>
-      <PageTransition pageKey={pageKey} direction={direction}>{page}</PageTransition>
-      <TabBar tab={tab} onTab={onTab} onFab={() => setSheet('choice')} th={th} />
-      <Toast msg={toast} th={th} />
-      <SheetChoice open={sheet === 'choice'} onClose={() => setSheet(null)} onPick={(k) => setSheet(k === 'expense' ? 'expense' : k === 'income' ? 'income' : 'rec')} th={th} />
-      <SheetAddExpense open={sheet === 'expense'} onClose={() => setSheet(null)} th={th} onSaved={showToast} />
-      <SheetAddIncome  open={sheet === 'income'}  onClose={() => setSheet(null)} th={th} onSaved={showToast} />
-      <SheetAddRecurrent open={sheet === 'rec'}   onClose={() => setSheet(null)} th={th} onSaved={showToast} />
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: th.bg }}>
+      {/* Sidebar — desktop only */}
+      {isDesktop && (
+        <Sidebar tab={tab} onTab={onTab} onFab={onFab} dark={dark} onToggleDark={() => setDark(!dark)} onLogout={onLogout} userId={userId} th={th} />
+      )}
+
+      {/* Main content */}
+      <div style={{ flex: 1, height: '100vh', overflow: 'hidden', position: 'relative' }}>
+        <PageTransition pageKey={pageKey} direction={direction}>{page}</PageTransition>
+
+        {/* Mobile tab bar */}
+        {!isDesktop && <TabBar tab={tab} onTab={onTab} onFab={onFab} th={th} />}
+
+        <Toast msg={toast} th={th} />
+        <SheetChoice open={sheet === 'choice'} onClose={() => setSheet(null)} onPick={(k) => setSheet(k === 'expense' ? 'expense' : k === 'income' ? 'income' : 'rec')} th={th} />
+        <SheetAddExpense    open={sheet === 'expense'} onClose={() => setSheet(null)} th={th} onSaved={showToast} />
+        <SheetAddIncome     open={sheet === 'income'}  onClose={() => setSheet(null)} th={th} onSaved={showToast} />
+        <SheetAddRecurrent  open={sheet === 'rec'}     onClose={() => setSheet(null)} th={th} onSaved={showToast} />
+      </div>
     </div>
   );
 }
@@ -104,51 +183,54 @@ function Router({ dark, showChart }: { dark: boolean; showChart: boolean }) {
 // ── Root
 export function BebouApp() {
   const [dark, setDark] = useState(false);
-  const [showChart, setShowChart] = useState(true);
-  const [resetKey, setResetKey] = useState(0);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+  const [authReady, setAuthReady] = useState(!supabaseEnabled);
+  const [isDesktop, setIsDesktop] = useState(false);
 
-  const [scale, setScale] = useState(1);
+  // Responsive breakpoint
   useEffect(() => {
-    const compute = () => {
-      const vw = window.innerWidth, vh = window.innerHeight;
-      if (vw < 500) { setScale(vw / 402); return; }
-      setScale(Math.min(vh / 874, 1));
-    };
-    compute();
-    window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
+    const check = () => setIsDesktop(window.innerWidth >= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#E8E3DC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {/* Tweaks (dev panel) */}
-      <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 1000, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderRadius: 14, padding: '14px 16px', minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)', fontFamily: SANS, fontSize: 13 }}>
-        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(0,0,0,0.5)', marginBottom: 10, fontWeight: 600 }}>Tweaks</div>
-        <TweakRow label="Mode sombre" on={dark} onToggle={() => setDark(d => !d)} />
-        <TweakRow label="Afficher graphiques" on={showChart} onToggle={() => setShowChart(c => !c)} />
-        <div onClick={() => { localStorage.removeItem(STORAGE_KEY_EXPORT); setResetKey(k => k + 1); }} style={{ marginTop: 8, padding: '7px 10px', fontSize: 12, color: T.coral, cursor: 'pointer', borderRadius: 8, textAlign: 'center', fontWeight: 500 }}>
-          Réinitialiser les données
-        </div>
-      </div>
+  // Supabase auth state
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id);
+      setAuthReady(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-      <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
-        <IOSDevice width={402} height={874} dark={dark}>
-          <AppStateProvider key={resetKey}>
-            <Router dark={dark} showChart={showChart} />
-          </AppStateProvider>
-        </IOSDevice>
-      </div>
-    </div>
-  );
-}
+  const handleLogout = async () => {
+    if (supabase) await supabase.auth.signOut();
+    setUserId(undefined);
+  };
 
-function TweakRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0' }}>
-      <span style={{ fontWeight: 500, color: '#2B2320' }}>{label}</span>
-      <div onClick={onToggle} style={{ width: 38, height: 22, background: on ? T.coral : '#e5ddd6', borderRadius: 11, position: 'relative', cursor: 'pointer', transition: 'background 0.2s' }}>
-        <div style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: 9, background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+  // Loading state while Supabase checks existing session
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100vh', background: T.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS }}>
+        <div style={{ fontFamily: SERIF, fontSize: 32, color: T.ink, opacity: 0.4 }}>Bébou</div>
       </div>
-    </div>
+    );
+  }
+
+  // Auth gate: show login if Supabase is enabled but no session
+  if (supabaseEnabled && !userId) {
+    return <AuthScreen />;
+  }
+
+  return (
+    <AppStateProvider userId={userId}>
+      <AppInner dark={dark} setDark={setDark} isDesktop={isDesktop} userId={userId} onLogout={handleLogout} />
+    </AppStateProvider>
   );
 }

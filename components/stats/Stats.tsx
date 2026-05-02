@@ -67,7 +67,7 @@ export function ScStats({ th, app, showChart }: Props) {
     .sort((a, b) => b.cur - a.cur);
 
   return (
-    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column', paddingTop: 54 }}>
+    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '10px 24px 0' }}>
         <div style={{ fontSize: 13, color: th.muted, letterSpacing: 0.3 }}>STATS</div>
         <div style={{ fontFamily: SERIF, fontSize: 36, lineHeight: 1, letterSpacing: -0.5, marginTop: 4 }}>Mois par mois</div>

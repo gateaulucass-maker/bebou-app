@@ -57,7 +57,7 @@ export function ScDashboard({ th, nav, app, showChart }: Props) {
   const t = computeTotals(curTxs);
 
   return (
-    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column', paddingTop: 54 }}>
+    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '14px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: th.muted, letterSpacing: 0.3 }}>{MONTHS_UPPER[now.getMonth()]} · {now.getFullYear()}</div>
         <Tap onClick={() => nav('journal')} style={{ padding: 6, borderRadius: 10 }}>{Icon.search(th.ink)}</Tap>

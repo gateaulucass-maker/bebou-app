@@ -23,7 +23,7 @@ export function ScJournal({ th, nav, app, params }: Props) {
   const total = filtered.reduce((s, x) => s + x.amount, 0);
 
   return (
-    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column', paddingTop: 54 }}>
+    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '10px 20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
         <Tap onClick={() => nav(-1)} style={{ padding: 6 }}>{Icon.back(th.ink)}</Tap>
         <div style={{ fontSize: 13, color: th.muted, letterSpacing: 0.3 }}>JOURNAL</div>

@@ -11,7 +11,7 @@ interface Props { th: Theme; nav: (s: string | number) => void; app: AppStateSha
 export function ScRecurrent({ th, app, onAdd }: Props) {
   const total = app.recs.reduce((s, r) => s + r.amount, 0);
   return (
-    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column', paddingTop: 54 }}>
+    <div style={{ height: '100%', background: th.bg, color: th.ink, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '10px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 13, color: th.muted, letterSpacing: 0.3 }}>RÉCURRENT</div>
         <Tap onClick={onAdd} style={{ fontSize: 13, color: T.coral, fontWeight: 500 }}>+ Ajouter</Tap>
