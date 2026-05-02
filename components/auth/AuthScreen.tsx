@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { T, SERIF, SANS } from '../ui/tokens';
 
-const PIN = '2407';
+const PIN = '2107';
 
 export function AuthScreen({ onAuth }: { onAuth: () => void }) {
   const [digits, setDigits] = useState('');
