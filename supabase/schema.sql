@@ -1,9 +1,10 @@
--- Bebou App — schema Supabase
--- À coller dans l'éditeur SQL de ton projet Supabase
+-- Bebou App — schema Supabase (sans auth, accès PIN local)
 
-create table if not exists transactions (
+drop table if exists transactions cascade;
+drop table if exists recurrents cascade;
+
+create table transactions (
   id         text        primary key,
-  user_id    uuid        references auth.users not null,
   ts         bigint      not null,
   label      text        not null,
   cat        text        not null,
@@ -13,9 +14,8 @@ create table if not exists transactions (
   created_at timestamptz default now()
 );
 
-create table if not exists recurrents (
+create table recurrents (
   id         text        primary key,
-  user_id    uuid        references auth.users not null,
   label      text        not null,
   amount     numeric     not null,
   day        integer     not null,
@@ -23,12 +23,9 @@ create table if not exists recurrents (
   created_at timestamptz default now()
 );
 
--- Row Level Security : chaque utilisateur voit uniquement ses données
+-- RLS activé mais accès libre pour la clé anon (app personnelle)
 alter table transactions enable row level security;
 alter table recurrents   enable row level security;
 
-create policy "transactions: own rows" on transactions
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
-create policy "recurrents: own rows" on recurrents
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "transactions: open" on transactions for all to anon using (true) with check (true);
+create policy "recurrents: open"   on recurrents   for all to anon using (true) with check (true);

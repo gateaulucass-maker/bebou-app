@@ -6,7 +6,6 @@ import { theme, T, SANS, SERIF } from './ui/tokens';
 import { Icon } from './ui/Icons';
 import { Tap, PageTransition, Toast } from './ui/Primitives';
 import { AuthScreen } from './auth/AuthScreen';
-import { supabase, supabaseEnabled } from '@/lib/supabase';
 import { ScDashboard } from './screens/Dashboard';
 import { ScJournal } from './screens/Journal';
 import { ScRecurrent } from './screens/Recurrent';
@@ -69,11 +68,9 @@ function Sidebar({ tab, onTab, onFab, dark, onToggleDark, onLogout, userId, th }
           </div>
         </Tap>
 
-        {supabaseEnabled && userId && (
-          <Tap onClick={onLogout} style={{ padding: '8px 12px', borderRadius: 10, color: th.muted, fontSize: 13, fontFamily: SANS, textAlign: 'left' }}>
-            Se déconnecter
-          </Tap>
-        )}
+        <Tap onClick={onLogout} style={{ padding: '8px 12px', borderRadius: 10, color: th.muted, fontSize: 13, fontFamily: SANS, textAlign: 'left' }}>
+          Verrouiller
+        </Tap>
       </div>
     </div>
   );
@@ -110,9 +107,8 @@ function TabBar({ tab, onTab, onFab, th }: { tab: string; onTab: (k: string) => 
 }
 
 // ── Inner app (needs AppState context)
-function AppInner({ dark, setDark, isDesktop, userId, onLogout }: {
-  dark: boolean; setDark: (d: boolean) => void;
-  isDesktop: boolean; userId?: string; onLogout: () => void;
+function AppInner({ dark, setDark, isDesktop }: {
+  dark: boolean; setDark: (d: boolean) => void; isDesktop: boolean;
 }) {
   const th = theme(dark);
   const app = useApp();
@@ -160,7 +156,7 @@ function AppInner({ dark, setDark, isDesktop, userId, onLogout }: {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: th.bg }}>
       {/* Sidebar — desktop only */}
       {isDesktop && (
-        <Sidebar tab={tab} onTab={onTab} onFab={onFab} dark={dark} onToggleDark={() => setDark(!dark)} onLogout={onLogout} userId={userId} th={th} />
+        <Sidebar tab={tab} onTab={onTab} onFab={onFab} dark={dark} onToggleDark={() => setDark(!dark)} onLogout={() => { sessionStorage.removeItem('bebou.auth'); window.location.reload(); }} userId={undefined} th={th} />
       )}
 
       {/* Main content */}
@@ -183,8 +179,7 @@ function AppInner({ dark, setDark, isDesktop, userId, onLogout }: {
 // ── Root
 export function BebouApp() {
   const [dark, setDark] = useState(false);
-  const [userId, setUserId] = useState<string | undefined>(undefined);
-  const [authReady, setAuthReady] = useState(!supabaseEnabled);
+  const [authed, setAuthed] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
   // Responsive breakpoint
@@ -195,42 +190,18 @@ export function BebouApp() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Supabase auth state
+  // Check existing session
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id);
-      setAuthReady(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id);
-      setAuthReady(true);
-    });
-    return () => subscription.unsubscribe();
+    if (sessionStorage.getItem('bebou.auth') === '1') setAuthed(true);
   }, []);
 
-  const handleLogout = async () => {
-    if (supabase) await supabase.auth.signOut();
-    setUserId(undefined);
-  };
-
-  // Loading state while Supabase checks existing session
-  if (!authReady) {
-    return (
-      <div style={{ minHeight: '100vh', background: T.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS }}>
-        <div style={{ fontFamily: SERIF, fontSize: 32, color: T.ink, opacity: 0.4 }}>Bébou</div>
-      </div>
-    );
-  }
-
-  // Auth gate: show login if Supabase is enabled but no session
-  if (supabaseEnabled && !userId) {
-    return <AuthScreen />;
+  if (!authed) {
+    return <AuthScreen onAuth={() => setAuthed(true)} />;
   }
 
   return (
-    <AppStateProvider userId={userId}>
-      <AppInner dark={dark} setDark={setDark} isDesktop={isDesktop} userId={userId} onLogout={handleLogout} />
+    <AppStateProvider>
+      <AppInner dark={dark} setDark={setDark} isDesktop={isDesktop} />
     </AppStateProvider>
   );
 }

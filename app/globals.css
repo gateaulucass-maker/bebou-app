@@ -28,6 +28,14 @@ input::placeholder { color: rgba(43,35,32,0.4); }
   to   { transform: scaleY(1); }
 }
 
+@keyframes bb-shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-10px); }
+  40%       { transform: translateX(10px); }
+  60%       { transform: translateX(-8px); }
+  80%       { transform: translateX(8px); }
+}
+
 .bb-stagger > * { opacity: 0; animation: bb-fade-in 400ms ease-out forwards; }
 .bb-stagger > *:nth-child(1)  { animation-delay: 40ms; }
 .bb-stagger > *:nth-child(2)  { animation-delay: 90ms; }

@@ -1,100 +1,65 @@
 'use client';
 
 import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { T, SERIF, SANS } from '../ui/tokens';
 
-type Step = 'email' | 'otp';
+const PIN = '2407';
 
-export function AuthScreen() {
-  const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export function AuthScreen({ onAuth }: { onAuth: () => void }) {
+  const [digits, setDigits] = useState('');
+  const [shake, setShake] = useState(false);
 
-  async function sendOtp() {
-    if (!supabase) return;
-    setLoading(true); setError('');
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    setLoading(false);
-    if (error) { setError(error.message); return; }
-    setStep('otp');
-  }
+  const press = (d: string) => {
+    if (digits.length >= 4) return;
+    const next = digits + d;
+    setDigits(next);
+    if (next.length === 4) {
+      if (next === PIN) {
+        sessionStorage.setItem('bebou.auth', '1');
+        onAuth();
+      } else {
+        setShake(true);
+        setTimeout(() => { setDigits(''); setShake(false); }, 600);
+      }
+    }
+  };
 
-  async function verifyOtp() {
-    if (!supabase) return;
-    setLoading(true); setError('');
-    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'email' });
-    setLoading(false);
-    if (error) setError('Code incorrect, réessaie.');
-  }
+  const del = () => setDigits((d) => d.slice(0, -1));
+
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
   return (
-    <div style={{ minHeight: '100vh', background: T.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS, padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🧡</div>
-          <div style={{ fontFamily: SERIF, fontSize: 36, letterSpacing: -0.5, color: T.ink }}>Bébou</div>
-          <div style={{ fontSize: 14, color: T.muted, marginTop: 6, fontStyle: 'italic' }}>ton suivi de dépenses perso</div>
+    <div style={{ minHeight: '100vh', background: T.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS }}>
+      <div style={{ width: '100%', maxWidth: 320, padding: 24, textAlign: 'center' }}>
+        {/* Logo */}
+        <div style={{ fontFamily: SERIF, fontSize: 40, letterSpacing: -0.5, color: T.ink, marginBottom: 4 }}>Bébou</div>
+        <div style={{ fontSize: 13, color: T.muted, fontStyle: 'italic', marginBottom: 48 }}>Entre ton code</div>
+
+        {/* Dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 48, animation: shake ? 'bb-shake 500ms' : 'none' }}>
+          {[0,1,2,3].map((i) => (
+            <div key={i} style={{ width: 14, height: 14, borderRadius: 7, background: i < digits.length ? T.coral : T.faint, transition: 'background 150ms, transform 150ms', transform: i < digits.length ? 'scale(1.1)' : 'scale(1)' }} />
+          ))}
         </div>
 
-        {step === 'email' ? (
-          <div>
-            <label style={{ display: 'block', fontSize: 12, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
-              Ton adresse email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendOtp()}
-              placeholder="toi@exemple.fr"
-              autoFocus
-              style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${T.faint}`, outline: 'none', fontSize: 15, fontFamily: SANS, color: T.ink, background: T.card, boxSizing: 'border-box' }}
-            />
-            {error && <div style={{ fontSize: 13, color: T.coral, marginTop: 8 }}>{error}</div>}
-            <button
-              onClick={sendOtp}
-              disabled={!email.includes('@') || loading}
-              style={{ marginTop: 16, width: '100%', padding: 16, borderRadius: 16, border: 'none', background: email.includes('@') ? T.coral : T.faint, color: email.includes('@') ? '#fff' : T.muted, fontSize: 15, fontWeight: 600, cursor: email.includes('@') ? 'pointer' : 'default', fontFamily: SANS, transition: 'background 200ms' }}
-            >
-              {loading ? 'Envoi…' : 'Recevoir un code →'}
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: 14, color: T.muted, marginBottom: 20 }}>
-              Code envoyé à <strong style={{ color: T.ink }}>{email}</strong>.<br/>
-              <span style={{ fontStyle: 'italic' }}>Vérifie ta boîte mail.</span>
-            </div>
-            <label style={{ display: 'block', fontSize: 12, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
-              Code à 6 chiffres
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-              onKeyDown={(e) => e.key === 'Enter' && otp.length === 6 && verifyOtp()}
-              placeholder="123456"
-              autoFocus
-              style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${T.faint}`, outline: 'none', fontSize: 24, fontFamily: SERIF, letterSpacing: 6, textAlign: 'center', color: T.ink, background: T.card, boxSizing: 'border-box' }}
-            />
-            {error && <div style={{ fontSize: 13, color: T.coral, marginTop: 8 }}>{error}</div>}
-            <button
-              onClick={verifyOtp}
-              disabled={otp.length !== 6 || loading}
-              style={{ marginTop: 16, width: '100%', padding: 16, borderRadius: 16, border: 'none', background: otp.length === 6 ? T.coral : T.faint, color: otp.length === 6 ? '#fff' : T.muted, fontSize: 15, fontWeight: 600, cursor: otp.length === 6 ? 'pointer' : 'default', fontFamily: SANS, transition: 'background 200ms' }}
-            >
-              {loading ? 'Vérification…' : 'Connexion →'}
-            </button>
-            <div onClick={() => { setStep('email'); setOtp(''); setError(''); }} style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: T.muted, cursor: 'pointer', textDecoration: 'underline' }}>
-              Changer d&apos;email
-            </div>
-          </div>
-        )}
+        {/* Keypad */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {keys.map((k, i) => {
+            if (k === '') return <div key={i} />;
+            return (
+              <button
+                key={i}
+                onClick={() => k === '⌫' ? del() : press(k)}
+                style={{ height: 64, borderRadius: 18, border: 'none', background: k === '⌫' ? 'transparent' : T.card, color: k === '⌫' ? T.muted : T.ink, fontSize: k === '⌫' ? 22 : 26, fontFamily: SERIF, fontWeight: 400, cursor: 'pointer', boxShadow: k === '⌫' ? 'none' : '0 2px 8px rgba(43,35,32,0.08)', transition: 'transform 80ms, background 80ms', WebkitTapHighlightColor: 'transparent' }}
+                onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.93)')}
+                onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

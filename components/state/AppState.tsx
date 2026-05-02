@@ -64,7 +64,7 @@ function saveLocal(s: { txs: Transaction[]; recs: Recurrent[] }) {
 
 const AppStateCtx = createContext<AppStateShape | null>(null);
 
-export function AppStateProvider({ children, userId }: { children: React.ReactNode; userId?: string }) {
+export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [recs, setRecs] = useState<Recurrent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,10 +73,10 @@ export function AppStateProvider({ children, userId }: { children: React.ReactNo
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (supabaseEnabled && supabase && userId) {
+      if (supabaseEnabled && supabase) {
         const [{ data: txData }, { data: recData }] = await Promise.all([
-          supabase.from('transactions').select('*').eq('user_id', userId).order('ts', { ascending: false }),
-          supabase.from('recurrents').select('*').eq('user_id', userId),
+          supabase.from('transactions').select('*').order('ts', { ascending: false }),
+          supabase.from('recurrents').select('*'),
         ]);
         if (cancelled) return;
         const loadedTxs: Transaction[] = (txData ?? []).map((r) => ({
@@ -97,7 +97,7 @@ export function AppStateProvider({ children, userId }: { children: React.ReactNo
     }
     load();
     return () => { cancelled = true; };
-  }, [userId]);
+  }, []);
 
   // Keep localStorage in sync
   useEffect(() => {
@@ -109,33 +109,33 @@ export function AppStateProvider({ children, userId }: { children: React.ReactNo
     const ts = Date.now();
     const newTx: Transaction = { ...tx, id, ts };
     setTxs((prev) => [newTx, ...prev]);
-    if (supabaseEnabled && supabase && userId) {
-      await supabase.from('transactions').insert({ ...newTx, user_id: userId });
+    if (supabaseEnabled && supabase) {
+      await supabase.from('transactions').insert(newTx);
     }
-  }, [userId]);
+  }, []);
 
   const removeTx = useCallback(async (id: string) => {
     setTxs((prev) => prev.filter((t) => t.id !== id));
-    if (supabaseEnabled && supabase && userId) {
-      await supabase.from('transactions').delete().eq('id', id).eq('user_id', userId);
+    if (supabaseEnabled && supabase) {
+      await supabase.from('transactions').delete().eq('id', id);
     }
-  }, [userId]);
+  }, []);
 
   const addRec = useCallback(async (r: Omit<Recurrent, 'id'>) => {
     const id = 'r' + Date.now();
     const newRec: Recurrent = { ...r, id };
     setRecs((prev) => [...prev, newRec]);
-    if (supabaseEnabled && supabase && userId) {
-      await supabase.from('recurrents').insert({ ...newRec, user_id: userId });
+    if (supabaseEnabled && supabase) {
+      await supabase.from('recurrents').insert(newRec);
     }
-  }, [userId]);
+  }, []);
 
   const removeRec = useCallback(async (id: string) => {
     setRecs((prev) => prev.filter((r) => r.id !== id));
-    if (supabaseEnabled && supabase && userId) {
-      await supabase.from('recurrents').delete().eq('id', id).eq('user_id', userId);
+    if (supabaseEnabled && supabase) {
+      await supabase.from('recurrents').delete().eq('id', id);
     }
-  }, [userId]);
+  }, []);
 
   const value = useMemo<AppStateShape>(() => ({
     txs, recs, loading, addTx, removeTx, addRec, removeRec,
